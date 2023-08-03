@@ -1,49 +1,55 @@
-const config = require('config');
-var _ = require('lodash');
-let bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+var _ = require("lodash");
+let bcrypt = require("bcrypt");
 
-const Joi = require('joi')
+const Joi = require("joi");
 
-const {User} = require('../models/users');
-
+const { User } = require("../models/users");
 
 let express = require("express");
 let router = express.Router();
 
+router.post("/login", async (req, res) => {
 
 
-router.post('/login', async (req, res)=>{
-  console.log(req.body);
+  const { error } = validateLoginParams(req.body);
 
-  const {error} = validateLoginParams(req.body);
+  if (error) return res.status(400).send(error.details[0].message);
 
-  if(error) return res.status(400).send(error.details[0].message);
+  const { email } = req.body;
+try {
+  let user = await User.findOne({ email });
+  let {email, firstName, lastName, password, verified} = user;
+  if (!user) return res.status(400).send("Invalid email or password. ");
 
-  let user = await User.findOne({email: req.body.email});
+  if(!verified) throw new Error('please verfiy your account before trying to log in');
+  
+  const validPassword = await bcrypt.compare(req.body.password, password);
+  if (!validPassword)return res.status(400).send("Invalid email or password. ");
 
-  if (!user) return res.status(400).send('Invalid email or password. ');
+  const authToken = user.generateAuthToken();
 
-  const validPassword = await bcrypt.compare(req.body.password, user.password);
+  res.header('x-auth-token', authToken).json({
+    firstName,
+    lastName,
+    email
+  });
 
-  if(!validPassword) return res.status(400).send('Invalid email or password. ');
+} catch (error) {
+  res.json({
+    status: "UNVERIFIED USER",
+    message: error.message,
+  });
+}
 
-  const token = jwt.sign({_id: user._id}, config.get('jwtPrivateKey'));
-
-  res.send(token);
- 
 });
 
+function validateLoginParams(req) {
+  const schema = Joi.object({
+    email: Joi.string().min(5).max(255).required().email(),
+    password: Joi.string().min(5).max(255).required(),
+  });
 
-function validateLoginParams (req) {
-    const schema = Joi.object({
-       email: Joi.string().min(5).max(255).required().email(),
-       password: Joi.string().min(5).max(255).required()
-     })
-   
-   
-     return schema.validate(req);
-   }
-   
+  return schema.validate(req);
+}
 
-   module.exports = router;
+module.exports = router;

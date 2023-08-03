@@ -1,3 +1,5 @@
 {
-    "jwtPrivateKey": "omowo_jwtPrivateKey"
+  "jwtPrivateKey": "omowo_jwtPrivateKey",
+  "gmailAddress": "gt_gmail",
+  "gmailPassword": "gt_gmail_password"
 }

@@ -1,5 +1,6 @@
+const config = require("config");
 const { User, validateUser } = require("../models/users");
-const UserOTPVerification = require("../models/userOTPVerifification");
+const { UserOTPVerification } = require("../models/userOTPVerififications");
 
 const nodemailer = require("nodemailer");
 
@@ -10,12 +11,10 @@ let express = require("express");
 let router = express.Router();
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: true,
+  service: "gmail",
   auth: {
     user: "godstimeinstein@gmail.com",
-    password: "okomayin1998",
+    pass: "elvxbkvrdpdzdtcn",
   },
 });
 
@@ -26,11 +25,9 @@ router.post("/signUp", async (req, res) => {
     return res.status(400).json({ error: error.details[0].message });
   }
 
-  const { username, email, password } = req.body;
+  const { firstName, LastName, email, password } = req.body;
 
-  const existingUser = await User.findOne({
-    $or: [{ username }, { email }],
-  });
+  const existingUser = await User.findOne({ email });
 
   if (existingUser) {
     return res.status(409).json({ error: "Username or email already exists" });
@@ -41,25 +38,25 @@ router.post("/signUp", async (req, res) => {
 
   try {
     const newUser = new User({
-      username,
+      firstName,
+      LastName,
       email,
       password: hashedPassword,
       verified: false,
     });
 
-    await newUser.save();
+    const { email } = await newUser.save();
 
-    sendOTPVerificationEmail();
-
-    return res
-      .status(201)
-      .json({ message: "User created successfully", user: newUser });
+    sendOTPVerificationEmail({email}, res);
   } catch (error) {
-    return res.status(500).json({ error: "Failed to create user" });
+    return res
+      .status(500)
+      .json({ error: "Failed to create user", message: error.message });
   }
 });
 
 router.post("/verifyOTP", async (req, res) => {
+
   try {
     let { email, otp } = req.body;
     if (!email || !otp) {
@@ -70,20 +67,21 @@ router.post("/verifyOTP", async (req, res) => {
       });
       if (UserOTPVerificationRecords.length <= 0) {
         throw new Error(
-          "Account record doesn't exist or has been verified already. Please sign up or login"
+          "Account record doesn't exist. Please sign up or login"
         );
       } else {
         const { expiresAt } = UserOTPVerificationRecords[0];
-        const hashedOTP = UserOTPVerificationRecords[0].otp;
+       
 
         if (expiresAt < Date.now()) {
           await UserOTPVerification.delete({ email });
           throw new Error("Code has expired. Please request again.");
         } else {
+          const hashedOTP = UserOTPVerificationRecords[0].otp;
           const OTPValidity = await bcrypt.compare(otp, hashedOTP);
 
           if (!validOTP) {
-            throw new Error("Invalid code passed. Check your Inbox.");
+            throw new Error("Invalid OTP. Check your mail Inbox.");
           } else {
             await User.updateOne({ email }, { verified: true });
             await UserOTPVerification.delete({ email });
@@ -129,12 +127,14 @@ async function sendOTPVerificationEmail({ email }, res) {
       from: "godstimeinstein@gmail.com",
       to: email,
       subject: "Verify Your Email",
-      html: `<p>Enter <b>${otp}</b> in the app to verify your email address and complete</p>`,
+      html: `<p>Enter <b>${otp}</b> in the app to verify your email address and complete the sign up process</p>`,
     };
 
     const saltRounds = 10;
 
     const hashedPassword = await bcrypt.hash(otp, saltRounds);
+
+    console.log("Hello");
 
     const newUserOTPVerification = new UserOTPVerification({
       email,
@@ -142,7 +142,7 @@ async function sendOTPVerificationEmail({ email }, res) {
       createdAt: Date.now(),
       expiredAt: Date.now() + 3600000,
     });
-
+    console.log("Hello!!!!!!!");
     await newUserOTPVerification.save();
 
     transporter.sendMail(mailOptions);
